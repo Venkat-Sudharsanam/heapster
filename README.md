@@ -1,39 +1,46 @@
-# Heapster
+# Run Heapster in a Kubernetes cluster with an InfluxDB backend and a Grafana UI
 
-[![GoDoc](https://godoc.org/k8s.io/heapster?status.svg)](https://godoc.org/k8s.io/heapster) [![Build Status](https://travis-ci.org/kubernetes/heapster.svg?branch=master)](https://travis-ci.org/kubernetes/heapster)
+### Setup a Kubernetes cluster
+[Bring up a Kubernetes cluster](https://github.com/Venkat-Sudharsanam/kubernetes-fundamentals/blob/master/tutorials/1.%20install_kubernetes.md), if you haven't already.
+Ensure that you are able to interact with the cluster via `kubectl` (this may be `kubectl.sh` if using
+the local-up-cluster in the Kubernetes repository).
 
-Heapster enables Container Cluster Monitoring and Performance Analysis.
+### Start all of the pods and services
 
-Heapster currently supports [Kubernetes](https://github.com/kubernetes/kubernetes) and CoreOS natively.
-*Heapster is compatible with kubernetes versions starting from v1.0.6 only*
+In order to deploy Heapster and InfluxDB, you will need to create the Kubernetes resources
+described by the contents of [influxdb](https://github.com/Venkat-Sudharsanam/heapster/tree/master/influxdb).
+Ensure that you have a valid checkout of Heapster and are in the root directory of
+the Heapster repository, and then run
 
-It can be extended to support other cluster management solutions easily.
+```shell
+$ kubectl create -f deploy/kube-config/influxdb/
+```
 
-Heapster collects and interprets various signals like compute resource usage, lifecycle events, etc, and exports cluster metrics via [REST endpoints](docs/model.md).
-**Note: Some of the endpoints are only valid in Kubernetes clusters**
+Grafana service by default requests for a LoadBalancer. If that is not available in your cluster, consider changing that to NodePort. Use the external IP assigned to the Grafana service,
+to access Grafana.
+The default user name and password is 'admin'.
+Once you login to Grafana, add a datasource that is InfluxDB. The URL for InfluxDB will be `http://localhost:8086`. Database name is 'k8s'. Default user name and password is 'root'.
+Grafana documentation for InfluxDB [here](http://docs.grafana.org/datasources/influxdb/).
 
-Heapster supports multiple sources of data.
-More information [here](docs/source-configuration.md).
+Take a look at the [storage schema](storage-schema.md) to understand how metrics are stored in InfluxDB.
 
-Heapster supports a pluggable storage backend.
-It supports [InfluxDB](http://influxdb.com) with [Grafana](http://grafana.org/docs/features/influxdb), [Google Cloud Monitoring](https://cloud.google.com/monitoring/), [ElasticSearch](https://www.elastic.co/products/elasticsearch), [Google Cloud Logging](https://cloud.google.com/logging/), [Hawkular](http://www.hawkular.org), [Riemann](http://riemann.io) and [Kafka](http://kafka.apache.org/).
-We welcome patches that add additional storage backends.
-Documentation on storage sinks [here](docs/sink-configuration.md)
-The current version of Storage Schema is documented [here](docs/storage-schema.md).
+Grafana is set up to auto-populate nodes and pods using templates.
 
-### Running Heapster on Kubernetes
+The Grafana web interface can also be accessed via the api-server proxy. The URL should be visible in `kubectl cluster-info` once the above resources are created.
 
-To run Heapster on a Kubernetes cluster with,
-- InfluxDB use [this guide](docs/influxdb.md).
-- Google Cloud Monitoring and Google Cloud Logging use [this guide](docs/google.md).
+## Troubleshooting guide
 
-### Running Heapster on OpenShift
+See also the [debugging documentation](debugging.md).
 
-Using Heapster to monitor an OpenShift cluster requires some additional changes to the Kubernetes instructions to allow communication between the Heapster instance and OpenShift's secured endpoints. To run standalone Heapster or a combination of Heapster and Hawkular-Metrics in OpenShift, follow [this guide](https://github.com/openshift/origin-metrics).
+1. If the Grafana service is not accessible, it might not be running. Use `kubectl` to verify that the `heapster` and `influxdb & grafana` pods are alive.
+    ```
+    $ kubectl get pods --namespace=kube-system
+    ...
+    monitoring-grafana-927606581-0tmdx        1/1       Running   0          6d
+    monitoring-influxdb-3276295126-joqo2      1/1       Running   0          15d
+    ...
 
-#### Troubleshooting guide [here](docs/debugging.md)
+    $ kubectl get services --namespace=kube-system monitoring-grafana monitoring-influxdb
+    ```
 
-
-## Community
-
-Contributions, questions, and comments are all welcomed and encouraged! minkube developers hang out on [Slack](https://kubernetes.slack.com) in the #sig-instrumentation channel (get an invitation [here](http://slack.kubernetes.io/)). We also have the [kubernetes-dev Google Groups mailing list](https://groups.google.com/forum/#!forum/kubernetes-dev). If you are posting to the list please prefix your subject with "heapster: ".
+1. If you find InfluxDB to be using up a lot of CPU or memory, consider placing resource restrictions on the `InfluxDB & Grafana` pod. You can add `cpu: <millicores>` and `memory: <bytes>` in the [Controller Spec](../deploy/kube-config/influxdb/influxdb-grafana-controller.yaml) and relaunch the controllers by running `kubectl apply -f deploy/kube-config/influxdb/influxdb-grafana-controller.yaml` and deleting and old influxdb pods.
